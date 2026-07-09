@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dad-stock-bot"
+version = "0.1.0"
+description = "Domestic stock monitoring and paper-trading foundation for KIS Open API."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.31.0",
+  "websockets>=12.0",
+]
+
+[project.scripts]
+dad-stock-bot = "dad_stock_bot.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
