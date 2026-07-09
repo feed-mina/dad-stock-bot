@@ -22,6 +22,7 @@
 - SQLite 기반 시세/신호 저장소
 - 이동평균 돌파 기반 1차 매수/매도/대기 신호
 - 텔레그램 알림 전송 어댑터
+- 공공데이터포털 금융위원회 주식시세정보 기반 일별/지연 시세 조회
 
 실제 주문 전송은 아직 구현하지 않았습니다. 모의투자 환경에서 시세 수신과 전략 신호를 충분히 검증한 뒤 주문 API를 별도 단계로 붙입니다.
 
@@ -35,9 +36,12 @@ Copy-Item .env.example .env
 
 ```powershell
 python -m dad_stock_bot check-config
+python -m dad_stock_bot daily-quote 005930 --base-date 20260708
 python -m dad_stock_bot quote 005930
 python -m dad_stock_bot listen
 ```
+
+`daily-quote`는 공공데이터포털 `PUBLIC_DATA_SERVICE_KEY`를 사용합니다. 키가 아직 없다면 `check-config`와 단위 테스트까지 먼저 진행할 수 있고, 키를 받은 뒤 `.env`에 넣으면 됩니다.
 
 개발 환경에서 패키지를 설치하지 않고 바로 실행할 때는 `PYTHONPATH=src`를 지정합니다.
 

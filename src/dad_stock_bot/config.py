@@ -10,6 +10,9 @@ DEFAULT_REAL_REST_URL = "https://openapi.koreainvestment.com:9443"
 DEFAULT_DEMO_REST_URL = "https://openapivts.koreainvestment.com:29443"
 DEFAULT_REAL_WS_URL = "ws://ops.koreainvestment.com:21000"
 DEFAULT_DEMO_WS_URL = "ws://ops.koreainvestment.com:31000"
+DEFAULT_PUBLIC_DATA_STOCK_PRICE_URL = (
+    "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo"
+)
 
 
 def load_env_file(path: Path) -> dict[str, str]:
@@ -46,6 +49,8 @@ class Settings:
     database_path: Path
     rest_base_url: str
     websocket_url: str
+    public_data_service_key: str = ""
+    public_data_stock_price_url: str = DEFAULT_PUBLIC_DATA_STOCK_PRICE_URL
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
@@ -73,6 +78,12 @@ class Settings:
             database_path=Path(_get(env, "DAD_STOCK_DB_PATH", "data/market_ticks.sqlite3")),
             rest_base_url=_get(env, "KIS_REST_BASE_URL", default_rest).rstrip("/"),
             websocket_url=_get(env, "KIS_WEBSOCKET_URL", default_ws),
+            public_data_service_key=_get(env, "PUBLIC_DATA_SERVICE_KEY"),
+            public_data_stock_price_url=_get(
+                env,
+                "PUBLIC_DATA_STOCK_PRICE_URL",
+                DEFAULT_PUBLIC_DATA_STOCK_PRICE_URL,
+            ),
             telegram_bot_token=_get(env, "TELEGRAM_BOT_TOKEN"),
             telegram_chat_id=_get(env, "TELEGRAM_CHAT_ID"),
         )
@@ -99,6 +110,11 @@ class Settings:
             "websocket_url": self.websocket_url,
             "has_app_key": bool(self.app_key),
             "has_app_secret": bool(self.app_secret),
+            "has_public_data_service_key": bool(self.public_data_service_key),
+            "public_data_stock_price_url": self.public_data_stock_price_url,
             "telegram_enabled": bool(self.telegram_bot_token and self.telegram_chat_id),
         }
 
+    def require_public_data_credentials(self) -> None:
+        if not self.public_data_service_key:
+            raise ValueError("Missing required public data credential: PUBLIC_DATA_SERVICE_KEY")

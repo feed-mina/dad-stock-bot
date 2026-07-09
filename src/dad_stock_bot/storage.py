@@ -6,7 +6,7 @@ import json
 import sqlite3
 from typing import Iterator, Iterable
 
-from .models import Quote, RealtimeTrade, TradeSignal
+from .models import DailyPrice, Quote, RealtimeTrade, TradeSignal
 
 
 class SQLiteMarketStore:
@@ -64,6 +64,16 @@ class SQLiteMarketStore:
             event_time=quote.captured_at,
             source="rest",
             raw=quote.raw,
+        )
+
+    def save_daily_price(self, price: DailyPrice) -> None:
+        self._insert_tick(
+            symbol=price.symbol,
+            price=price.close,
+            volume=price.volume,
+            event_time=price.base_date or price.captured_at,
+            source="publicdata",
+            raw=price.raw,
         )
 
     def save_trade(self, trade: RealtimeTrade) -> None:

@@ -9,6 +9,7 @@ from typing import Sequence
 from .alerts import TelegramNotifier
 from .config import Settings
 from .kis import KISClient
+from .providers import PublicDataStockPriceProvider
 from .realtime import stream_realtime_trades
 from .storage import SQLiteMarketStore
 from .strategy import MovingAverageBreakoutStrategy
@@ -25,6 +26,18 @@ def build_parser() -> argparse.ArgumentParser:
     quote = subparsers.add_parser("quote", help="Fetch one REST quote and store it.")
     quote.add_argument("symbol", nargs="?", help="Stock code. Defaults to first configured symbol.")
     quote.add_argument("--no-save", action="store_true", help="Do not save the quote to SQLite.")
+
+    daily_quote = subparsers.add_parser(
+        "daily-quote",
+        help="Fetch one delayed daily quote from the public data portal and store it.",
+    )
+    daily_quote.add_argument(
+        "symbol",
+        nargs="?",
+        help="Stock code. Defaults to first configured symbol.",
+    )
+    daily_quote.add_argument("--base-date", help="YYYYMMDD trading date. Defaults to latest.")
+    daily_quote.add_argument("--no-save", action="store_true", help="Do not save to SQLite.")
 
     listen = subparsers.add_parser("listen", help="Listen to KIS websocket realtime trades.")
     listen.add_argument("--short-window", type=int, default=5)
@@ -54,6 +67,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps({"symbol": quote.symbol, "price": quote.price}, ensure_ascii=False))
         return 0
 
+    if args.command == "daily-quote":
+        symbol = args.symbol or settings.symbols[0]
+        provider = PublicDataStockPriceProvider(settings)
+        price = provider.get_daily_price(symbol, args.base_date)
+        if not args.no_save:
+            SQLiteMarketStore(settings.database_path).save_daily_price(price)
+        print(
+            json.dumps(
+                {
+                    "symbol": price.symbol,
+                    "name": price.name,
+                    "base_date": price.base_date,
+                    "close": price.close,
+                    "open": price.open,
+                    "high": price.high,
+                    "low": price.low,
+                    "volume": price.volume,
+                    "market": price.market,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
     if args.command == "listen":
         asyncio.run(_listen(settings, args.short_window, args.long_window))
         return 0
@@ -81,4 +118,3 @@ async def _listen(settings: Settings, short_window: int, long_window: int) -> No
         if signal.action != "HOLD":
             notifier.send_signal(signal)
         logging.info("%s %s %s", trade.symbol, trade.price, signal.action)
-

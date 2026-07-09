@@ -46,6 +46,38 @@ class Quote:
 
 
 @dataclass(frozen=True)
+class DailyPrice:
+    symbol: str
+    base_date: str
+    close: int
+    open: int = 0
+    high: int = 0
+    low: int = 0
+    volume: int = 0
+    amount: int = 0
+    name: str = ""
+    market: str = ""
+    captured_at: str = field(default_factory=utc_now_iso)
+    raw: Mapping[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_public_data(cls, item: Mapping[str, Any]) -> "DailyPrice":
+        return cls(
+            symbol=str(item.get("srtnCd") or item.get("SRtnCd") or ""),
+            base_date=str(item.get("basDt") or ""),
+            close=_to_int(item.get("clpr")),
+            open=_to_int(item.get("mkp")),
+            high=_to_int(item.get("hipr")),
+            low=_to_int(item.get("lopr")),
+            volume=_to_int(item.get("trqu")),
+            amount=_to_int(item.get("trPrc")),
+            name=str(item.get("itmsNm") or ""),
+            market=str(item.get("mrktCtg") or ""),
+            raw=dict(item),
+        )
+
+
+@dataclass(frozen=True)
 class RealtimeTrade:
     symbol: str
     trade_time: str
@@ -76,4 +108,3 @@ class TradeSignal:
     reason: str
     price: int
     generated_at: str = field(default_factory=utc_now_iso)
-

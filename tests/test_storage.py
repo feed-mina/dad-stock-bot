@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dad_stock_bot.models import RealtimeTrade, TradeSignal
+from dad_stock_bot.models import DailyPrice, RealtimeTrade, TradeSignal
 from dad_stock_bot.storage import SQLiteMarketStore
 
 
@@ -20,6 +20,14 @@ class StorageTest(unittest.TestCase):
                     change_rate=1.2,
                 )
             )
+            store.save_daily_price(
+                DailyPrice(
+                    symbol="005930",
+                    base_date="20260708",
+                    close=73100,
+                    volume=20,
+                )
+            )
             store.save_signal(
                 TradeSignal(
                     symbol="005930",
@@ -29,9 +37,8 @@ class StorageTest(unittest.TestCase):
                 )
             )
 
-            self.assertEqual(store.recent_prices("005930", 5), [73000])
+            self.assertEqual(store.recent_prices("005930", 5), [73000, 73100])
 
 
 if __name__ == "__main__":
     unittest.main()
-
