@@ -11,6 +11,43 @@
 - 스프레드시트/엑셀 기반의 직관적인 모니터링 환경 만들기
 - 모의투자 기반으로 안전하게 자동매매 로직까지 확장하기
 
+## 현재 구현 범위
+
+이 저장소는 이슈 #3의 8단계 로드맵 중, API 키 없이도 검증 가능한 기반 코드를 먼저 제공합니다.
+
+- `.env` 기반 KIS Open API 설정 관리
+- OAuth 접근 토큰 및 웹소켓 approval key 발급 클라이언트
+- 국내 주식 현재가 REST 조회(`FHKST01010100`)
+- 국내 주식 실시간 체결가 웹소켓 구독 메시지 및 `H0STCNT0` 파서
+- SQLite 기반 시세/신호 저장소
+- 이동평균 돌파 기반 1차 매수/매도/대기 신호
+- 텔레그램 알림 전송 어댑터
+
+실제 주문 전송은 아직 구현하지 않았습니다. 모의투자 환경에서 시세 수신과 전략 신호를 충분히 검증한 뒤 주문 API를 별도 단계로 붙입니다.
+
+## 빠른 시작
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env`에 한국투자증권에서 발급받은 모의투자 AppKey/SecretKey를 입력합니다.
+
+```powershell
+python -m dad_stock_bot check-config
+python -m dad_stock_bot quote 005930
+python -m dad_stock_bot listen
+```
+
+개발 환경에서 패키지를 설치하지 않고 바로 실행할 때는 `PYTHONPATH=src`를 지정합니다.
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m dad_stock_bot check-config
+```
+
+세부 실행 계획은 `docs/issue-3-development-plan.md`에 정리되어 있습니다.
+
 ## 개발 진행 절차 (8단계)
 
 완전한 실시간 국내 주가를 안정적으로 받아오고, 자동매매까지 확장하기 위한 표준 개발 프로세스입니다.
