@@ -23,6 +23,19 @@ SUMMARY_FIELDS = [
     "source",
 ]
 
+KOREAN_SUMMARY_FIELDS = [
+    ("name", "종목명"),
+    ("symbol", "종목코드"),
+    ("close", "현재가"),
+    ("change", "전일대비"),
+    ("change_rate", "등락률"),
+    ("volume", "거래량"),
+    ("amount", "거래대금"),
+    ("market_cap", "시가총액"),
+    ("base_date", "기준일"),
+    ("market", "시장"),
+]
+
 
 def build_summary_row(tick: Mapping[str, Any]) -> dict[str, Any]:
     raw = _parse_raw_json(tick.get("raw_json"))
@@ -58,6 +71,18 @@ def write_summary_csv(rows: Iterable[Mapping[str, Any]], output_path: str | Path
     return path
 
 
+def write_korean_summary_csv(rows: Iterable[Mapping[str, Any]], output_path: str | Path) -> Path:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8-sig") as file:
+        fieldnames = [label for _, label in KOREAN_SUMMARY_FIELDS]
+        writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({label: row.get(key, "") for key, label in KOREAN_SUMMARY_FIELDS})
+    return path
+
+
 def _parse_raw_json(value: Any) -> Mapping[str, Any]:
     if not value:
         return {}
@@ -88,4 +113,3 @@ def _to_float(value: Any) -> float | None:
         return float(str(value).replace(",", ""))
     except (TypeError, ValueError):
         return None
-
