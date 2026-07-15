@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import Sequence
 
 from .alerts import TelegramNotifier
@@ -38,6 +39,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     daily_quote.add_argument("--base-date", help="YYYYMMDD trading date. Defaults to latest.")
     daily_quote.add_argument("--no-save", action="store_true", help="Do not save to SQLite.")
+
+    daily_sync = subparsers.add_parser(
+        "daily-sync",
+        help="Fetch delayed daily quotes for all configured or supplied symbols.",
+    )
+    daily_sync.add_argument(
+        "--symbols",
+        help="Comma-separated stock codes. Defaults to DAD_STOCK_SYMBOLS.",
+    )
+    daily_sync.add_argument("--base-date", help="YYYYMMDD trading date. Defaults to latest.")
+
+    latest = subparsers.add_parser("latest", help="Print recent saved market rows as JSON.")
+    latest.add_argument("--symbol", help="Filter by stock code.")
+    latest.add_argument("--limit", type=int, default=20)
+
+    export_csv = subparsers.add_parser(
+        "export-csv",
+        help="Export recent saved market rows to a CSV file.",
+    )
+    export_csv.add_argument(
+        "--output",
+        default="data/latest_ticks.csv",
+        help="CSV output path.",
+    )
+    export_csv.add_argument("--symbol", help="Filter by stock code.")
+    export_csv.add_argument("--limit", type=int, default=200)
 
     listen = subparsers.add_parser("listen", help="Listen to KIS websocket realtime trades.")
     listen.add_argument("--short-window", type=int, default=5)
@@ -91,12 +118,55 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
 
+    if args.command == "daily-sync":
+        provider = PublicDataStockPriceProvider(settings)
+        store = SQLiteMarketStore(settings.database_path)
+        synced = []
+        for symbol in _parse_symbols(args.symbols) or settings.symbols:
+            price = provider.get_daily_price(symbol, args.base_date)
+            store.save_daily_price(price)
+            synced.append(
+                {
+                    "symbol": price.symbol,
+                    "name": price.name,
+                    "base_date": price.base_date,
+                    "close": price.close,
+                    "volume": price.volume,
+                    "market": price.market,
+                }
+            )
+        print(json.dumps({"synced": synced}, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "latest":
+        rows = SQLiteMarketStore(settings.database_path).latest_ticks(
+            symbol=args.symbol,
+            limit=args.limit,
+        )
+        print(json.dumps({"rows": rows}, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "export-csv":
+        path = SQLiteMarketStore(settings.database_path).export_ticks_csv(
+            output_path=Path(args.output),
+            symbol=args.symbol,
+            limit=args.limit,
+        )
+        print(json.dumps({"output": str(path)}, ensure_ascii=False))
+        return 0
+
     if args.command == "listen":
         asyncio.run(_listen(settings, args.short_window, args.long_window))
         return 0
 
     parser.error(f"Unknown command: {args.command}")
     return 2
+
+
+def _parse_symbols(value: str | None) -> tuple[str, ...]:
+    if not value:
+        return ()
+    return tuple(symbol.strip() for symbol in value.split(",") if symbol.strip())
 
 
 async def _listen(settings: Settings, short_window: int, long_window: int) -> None:

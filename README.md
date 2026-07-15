@@ -23,6 +23,7 @@
 - 이동평균 돌파 기반 1차 매수/매도/대기 신호
 - 텔레그램 알림 전송 어댑터
 - 공공데이터포털 금융위원회 주식시세정보 기반 일별/지연 시세 조회
+- 관심종목 일괄 동기화, 최근 저장 데이터 조회, CSV 내보내기
 
 실제 주문 전송은 아직 구현하지 않았습니다. 모의투자 환경에서 시세 수신과 전략 신호를 충분히 검증한 뒤 주문 API를 별도 단계로 붙입니다.
 
@@ -37,6 +38,9 @@ Copy-Item .env.example .env
 ```powershell
 python -m dad_stock_bot check-config
 python -m dad_stock_bot daily-quote 005930 --base-date 20260708
+python -m dad_stock_bot daily-sync --symbols 005930,000660 --base-date 20260708
+python -m dad_stock_bot latest --limit 10
+python -m dad_stock_bot export-csv --output data/latest_ticks.csv
 python -m dad_stock_bot quote 005930
 python -m dad_stock_bot listen
 ```

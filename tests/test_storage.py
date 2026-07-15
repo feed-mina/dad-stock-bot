@@ -38,6 +38,15 @@ class StorageTest(unittest.TestCase):
             )
 
             self.assertEqual(store.recent_prices("005930", 5), [73000, 73100])
+            latest = store.latest_ticks("005930", 2)
+            self.assertEqual(latest[0]["price"], 73100)
+            self.assertEqual(latest[0]["source"], "publicdata")
+
+            csv_path = store.export_ticks_csv(Path(tmp) / "latest.csv", symbol="005930")
+            csv_text = csv_path.read_text(encoding="utf-8")
+            self.assertIn("symbol,price,volume,event_time,source", csv_text)
+            self.assertIn("005930,73000,10", csv_text)
+            self.assertIn("005930,73100,20", csv_text)
 
 
 if __name__ == "__main__":

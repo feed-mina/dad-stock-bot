@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import csv
 from pathlib import Path
 import json
 import sqlite3
@@ -117,6 +118,54 @@ class SQLiteMarketStore:
                 (symbol, limit),
             ).fetchall()
         return [int(row["price"]) for row in reversed(rows)]
+
+    def latest_ticks(self, symbol: str | None = None, limit: int = 20) -> list[dict[str, object]]:
+        sql = """
+            SELECT symbol, price, volume, event_time, source, raw_json
+            FROM ticks
+        """
+        params: list[object] = []
+        if symbol:
+            sql += " WHERE symbol = ?"
+            params.append(symbol)
+        sql += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+
+        with self._connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+
+        result: list[dict[str, object]] = []
+        for row in rows:
+            result.append(
+                {
+                    "symbol": row["symbol"],
+                    "price": int(row["price"]),
+                    "volume": int(row["volume"]),
+                    "event_time": row["event_time"],
+                    "source": row["source"],
+                    "raw_json": row["raw_json"],
+                }
+            )
+        return result
+
+    def export_ticks_csv(
+        self,
+        output_path: str | Path,
+        symbol: str | None = None,
+        limit: int = 200,
+    ) -> Path:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rows = list(reversed(self.latest_ticks(symbol=symbol, limit=limit)))
+        with path.open("w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(
+                file,
+                fieldnames=["symbol", "price", "volume", "event_time", "source"],
+                extrasaction="ignore",
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+        return path
 
     def save_signal(self, signal: TradeSignal) -> None:
         with self._connect() as connection:
