@@ -73,6 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Dedupe all sources. Defaults to publicdata only.",
     )
 
+    subparsers.add_parser("gui", help="Open the desktop GUI.")
+
     listen = subparsers.add_parser("listen", help="Listen to KIS websocket realtime trades.")
     listen.add_argument("--short-window", type=int, default=5)
     listen.add_argument("--long-window", type=int, default=20)
@@ -166,6 +168,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         source = None if args.all_sources else "publicdata"
         deleted = SQLiteMarketStore(settings.database_path).dedupe_ticks(source=source)
         print(json.dumps({"deleted": deleted}, ensure_ascii=False))
+        return 0
+
+    if args.command == "gui":
+        from .gui import run_gui
+
+        run_gui(settings)
         return 0
 
     if args.command == "listen":
