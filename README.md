@@ -47,6 +47,13 @@ python -m dad_stock_bot listen
 
 `daily-quote`는 공공데이터포털 `PUBLIC_DATA_SERVICE_KEY`를 사용합니다. 키가 아직 없다면 `check-config`와 단위 테스트까지 먼저 진행할 수 있고, 키를 받은 뒤 `.env`에 넣으면 됩니다.
 
+403 Forbidden이 나오면 아래를 먼저 확인합니다.
+
+- 공공데이터포털에서 `금융위원회_주식시세정보` 활용신청이 승인되었는지 확인
+- `.env`의 `PUBLIC_DATA_SERVICE_KEY`에 값이 들어갔는지 확인
+- 가능하면 `일반 인증키 (Decoding)` 값을 사용
+- `Encoding` 값을 붙여 넣은 경우 최신 코드에서는 자동으로 한 번 디코딩해서 요청
+
 개발 환경에서 패키지를 설치하지 않고 바로 실행할 때는 `PYTHONPATH=src`를 지정합니다.
 
 ```powershell

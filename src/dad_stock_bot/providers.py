@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
+from urllib.parse import unquote
 
 from .config import Settings
 from .models import DailyPrice
@@ -38,7 +39,7 @@ class PublicDataStockPriceProvider:
         self.settings.require_public_data_credentials()
 
         params = {
-            "serviceKey": self.settings.public_data_service_key,
+            "serviceKey": normalize_service_key(self.settings.public_data_service_key),
             "pageNo": "1",
             "numOfRows": "1",
             "resultType": "json",
@@ -75,6 +76,14 @@ class PublicDataStockPriceProvider:
     def _json_or_raise(response: Any) -> Mapping[str, Any]:
         status_code = getattr(response, "status_code", 0)
         if status_code >= 400:
+            if status_code == 403:
+                raise PublicDataError(
+                    "Public data HTTP error 403: Forbidden. Check that "
+                    "PUBLIC_DATA_SERVICE_KEY is set, the data.go.kr utilization request is "
+                    "approved for 금융위원회_주식시세정보, and the key is the 일반 인증키 "
+                    "Decoding value. If you pasted the Encoding value, update to the latest "
+                    "code or replace it with the Decoding value from data.go.kr."
+                )
             raise PublicDataError(
                 f"Public data HTTP error {status_code}: {getattr(response, 'text', '')}"
             )
@@ -109,3 +118,11 @@ class PublicDataStockPriceProvider:
         if isinstance(item, list) and item and isinstance(item[0], Mapping):
             return item[0]
         raise PublicDataError("No stock price item found in public data response.")
+
+
+def normalize_service_key(value: str) -> str:
+    """Use decoded service keys because requests encodes query params for us."""
+    stripped = value.strip()
+    if "%" not in stripped:
+        return stripped
+    return unquote(stripped)

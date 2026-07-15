@@ -1,7 +1,11 @@
 import unittest
 
 from dad_stock_bot.config import Settings
-from dad_stock_bot.providers import PublicDataError, PublicDataStockPriceProvider
+from dad_stock_bot.providers import (
+    PublicDataError,
+    PublicDataStockPriceProvider,
+    normalize_service_key,
+)
 
 
 class FakeResponse:
@@ -63,6 +67,25 @@ class PublicDataStockPriceProviderTest(unittest.TestCase):
         self.assertEqual(params["serviceKey"], "key")
         self.assertEqual(params["likeSrtnCd"], "005930")
         self.assertEqual(params["basDt"], "20260708")
+
+    def test_encoding_key_is_decoded_before_request(self) -> None:
+        settings = Settings.from_mapping({"PUBLIC_DATA_SERVICE_KEY": "abc%2Bdef%3D"})
+        session = FakeSession(
+            {
+                "response": {
+                    "header": {"resultCode": "00"},
+                    "body": {"items": {"item": {"srtnCd": "005930", "clpr": "1"}}},
+                }
+            }
+        )
+        provider = PublicDataStockPriceProvider(settings, session=session)
+
+        provider.get_daily_price("005930")
+
+        self.assertEqual(session.gets[0][1]["params"]["serviceKey"], "abc+def=")
+
+    def test_normalize_service_key_keeps_decoding_key(self) -> None:
+        self.assertEqual(normalize_service_key("abc+def="), "abc+def=")
 
     def test_missing_public_data_key_raises(self) -> None:
         settings = Settings.from_mapping({})
