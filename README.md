@@ -40,12 +40,15 @@ python -m dad_stock_bot check-config
 python -m dad_stock_bot daily-quote 005930 --base-date 20260708
 python -m dad_stock_bot daily-sync --symbols 005930,000660 --base-date 20260708
 python -m dad_stock_bot latest --limit 10
+python -m dad_stock_bot dedupe
 python -m dad_stock_bot export-csv --output data/latest_ticks.csv
 python -m dad_stock_bot quote 005930
 python -m dad_stock_bot listen
 ```
 
 `daily-quote`는 공공데이터포털 `PUBLIC_DATA_SERVICE_KEY`를 사용합니다. 키가 아직 없다면 `check-config`와 단위 테스트까지 먼저 진행할 수 있고, 키를 받은 뒤 `.env`에 넣으면 됩니다.
+
+`daily-sync`는 같은 종목/기준일의 공공데이터 행을 새 값으로 교체합니다. 기존 버전에서 중복 저장된 행은 `python -m dad_stock_bot dedupe`로 한 번 정리한 뒤 CSV를 다시 내보내면 됩니다.
 
 403 Forbidden이 나오면 아래를 먼저 확인합니다.
 

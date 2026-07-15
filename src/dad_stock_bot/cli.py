@@ -66,6 +66,13 @@ def build_parser() -> argparse.ArgumentParser:
     export_csv.add_argument("--symbol", help="Filter by stock code.")
     export_csv.add_argument("--limit", type=int, default=200)
 
+    dedupe = subparsers.add_parser("dedupe", help="Remove duplicate saved market rows.")
+    dedupe.add_argument(
+        "--all-sources",
+        action="store_true",
+        help="Dedupe all sources. Defaults to publicdata only.",
+    )
+
     listen = subparsers.add_parser("listen", help="Listen to KIS websocket realtime trades.")
     listen.add_argument("--short-window", type=int, default=5)
     listen.add_argument("--long-window", type=int, default=20)
@@ -153,6 +160,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             limit=args.limit,
         )
         print(json.dumps({"output": str(path)}, ensure_ascii=False))
+        return 0
+
+    if args.command == "dedupe":
+        source = None if args.all_sources else "publicdata"
+        deleted = SQLiteMarketStore(settings.database_path).dedupe_ticks(source=source)
+        print(json.dumps({"deleted": deleted}, ensure_ascii=False))
         return 0
 
     if args.command == "listen":

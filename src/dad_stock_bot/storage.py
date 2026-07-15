@@ -68,11 +68,20 @@ class SQLiteMarketStore:
         )
 
     def save_daily_price(self, price: DailyPrice) -> None:
+        event_time = price.base_date or price.captured_at
+        with self._connect() as connection:
+            connection.execute(
+                """
+                DELETE FROM ticks
+                WHERE symbol = ? AND event_time = ? AND source = ?
+                """,
+                (price.symbol, event_time, "publicdata"),
+            )
         self._insert_tick(
             symbol=price.symbol,
             price=price.close,
             volume=price.volume,
-            event_time=price.base_date or price.captured_at,
+            event_time=event_time,
             source="publicdata",
             raw=price.raw,
         )
@@ -166,6 +175,23 @@ class SQLiteMarketStore:
             writer.writeheader()
             writer.writerows(rows)
         return path
+
+    def dedupe_ticks(self, source: str | None = "publicdata") -> int:
+        where = "source = ?" if source else "1 = 1"
+        params: list[object] = [source] if source else []
+        sql = f"""
+            DELETE FROM ticks
+            WHERE id NOT IN (
+                SELECT MAX(id)
+                FROM ticks
+                WHERE {where}
+                GROUP BY symbol, event_time, source
+            )
+            AND {where}
+        """
+        with self._connect() as connection:
+            cursor = connection.execute(sql, params + params)
+            return int(cursor.rowcount)
 
     def save_signal(self, signal: TradeSignal) -> None:
         with self._connect() as connection:
