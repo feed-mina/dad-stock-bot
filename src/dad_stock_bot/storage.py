@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import csv
 from pathlib import Path
 import json
 import sqlite3
 from typing import Iterator, Iterable
 
-from .models import Quote, RealtimeTrade, TradeSignal
+from .models import DailyPrice, Quote, RealtimeTrade, TradeSignal
 
 
 class SQLiteMarketStore:
@@ -66,6 +67,25 @@ class SQLiteMarketStore:
             raw=quote.raw,
         )
 
+    def save_daily_price(self, price: DailyPrice) -> None:
+        event_time = price.base_date or price.captured_at
+        with self._connect() as connection:
+            connection.execute(
+                """
+                DELETE FROM ticks
+                WHERE symbol = ? AND event_time = ? AND source = ?
+                """,
+                (price.symbol, event_time, "publicdata"),
+            )
+        self._insert_tick(
+            symbol=price.symbol,
+            price=price.close,
+            volume=price.volume,
+            event_time=event_time,
+            source="publicdata",
+            raw=price.raw,
+        )
+
     def save_trade(self, trade: RealtimeTrade) -> None:
         self._insert_tick(
             symbol=trade.symbol,
@@ -107,6 +127,71 @@ class SQLiteMarketStore:
                 (symbol, limit),
             ).fetchall()
         return [int(row["price"]) for row in reversed(rows)]
+
+    def latest_ticks(self, symbol: str | None = None, limit: int = 20) -> list[dict[str, object]]:
+        sql = """
+            SELECT symbol, price, volume, event_time, source, raw_json
+            FROM ticks
+        """
+        params: list[object] = []
+        if symbol:
+            sql += " WHERE symbol = ?"
+            params.append(symbol)
+        sql += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+
+        with self._connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+
+        result: list[dict[str, object]] = []
+        for row in rows:
+            result.append(
+                {
+                    "symbol": row["symbol"],
+                    "price": int(row["price"]),
+                    "volume": int(row["volume"]),
+                    "event_time": row["event_time"],
+                    "source": row["source"],
+                    "raw_json": row["raw_json"],
+                }
+            )
+        return result
+
+    def export_ticks_csv(
+        self,
+        output_path: str | Path,
+        symbol: str | None = None,
+        limit: int = 200,
+    ) -> Path:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rows = list(reversed(self.latest_ticks(symbol=symbol, limit=limit)))
+        with path.open("w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(
+                file,
+                fieldnames=["symbol", "price", "volume", "event_time", "source"],
+                extrasaction="ignore",
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+        return path
+
+    def dedupe_ticks(self, source: str | None = "publicdata") -> int:
+        where = "source = ?" if source else "1 = 1"
+        params: list[object] = [source] if source else []
+        sql = f"""
+            DELETE FROM ticks
+            WHERE id NOT IN (
+                SELECT MAX(id)
+                FROM ticks
+                WHERE {where}
+                GROUP BY symbol, event_time, source
+            )
+            AND {where}
+        """
+        with self._connect() as connection:
+            cursor = connection.execute(sql, params + params)
+            return int(cursor.rowcount)
 
     def save_signal(self, signal: TradeSignal) -> None:
         with self._connect() as connection:

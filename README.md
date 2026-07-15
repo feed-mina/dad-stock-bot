@@ -22,6 +22,8 @@
 - SQLite 기반 시세/신호 저장소
 - 이동평균 돌파 기반 1차 매수/매도/대기 신호
 - 텔레그램 알림 전송 어댑터
+- 공공데이터포털 금융위원회 주식시세정보 기반 일별/지연 시세 조회
+- 관심종목 일괄 동기화, 최근 저장 데이터 조회, CSV 내보내기
 
 실제 주문 전송은 아직 구현하지 않았습니다. 모의투자 환경에서 시세 수신과 전략 신호를 충분히 검증한 뒤 주문 API를 별도 단계로 붙입니다.
 
@@ -35,9 +37,36 @@ Copy-Item .env.example .env
 
 ```powershell
 python -m dad_stock_bot check-config
+python -m dad_stock_bot daily-quote 005930 --base-date 20260708
+python -m dad_stock_bot daily-sync --symbols 005930,000660 --base-date 20260708
+python -m dad_stock_bot latest --limit 10
+python -m dad_stock_bot dedupe
+python -m dad_stock_bot export-csv --output data/latest_ticks.csv
+python -m dad_stock_bot gui
 python -m dad_stock_bot quote 005930
 python -m dad_stock_bot listen
 ```
+
+`daily-quote`는 공공데이터포털 `PUBLIC_DATA_SERVICE_KEY`를 사용합니다. 키가 아직 없다면 `check-config`와 단위 테스트까지 먼저 진행할 수 있고, 키를 받은 뒤 `.env`에 넣으면 됩니다.
+
+`daily-sync`는 같은 종목/기준일의 공공데이터 행을 새 값으로 교체합니다. 기존 버전에서 중복 저장된 행은 `python -m dad_stock_bot dedupe`로 한 번 정리한 뒤 CSV를 다시 내보내면 됩니다.
+
+GUI로 실행하려면 아래 명령을 사용합니다.
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m dad_stock_bot gui
+```
+
+GUI에서는 관심종목 동기화, 저장 데이터 새로고침, 요약 CSV 저장, 중복 정리를 버튼으로 실행할 수 있습니다.
+60대 한국인 사용자가 보기 쉽도록 한국어 버튼, 큰 글씨, 상승/하락 색상, 상단 요약 영역을 제공합니다.
+
+403 Forbidden이 나오면 아래를 먼저 확인합니다.
+
+- 공공데이터포털에서 `금융위원회_주식시세정보` 활용신청이 승인되었는지 확인
+- `.env`의 `PUBLIC_DATA_SERVICE_KEY`에 값이 들어갔는지 확인
+- 가능하면 `일반 인증키 (Decoding)` 값을 사용
+- `Encoding` 값을 붙여 넣은 경우 최신 코드에서는 자동으로 한 번 디코딩해서 요청
 
 개발 환경에서 패키지를 설치하지 않고 바로 실행할 때는 `PYTHONPATH=src`를 지정합니다.
 
