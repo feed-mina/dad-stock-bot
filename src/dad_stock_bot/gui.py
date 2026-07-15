@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import calendar
+import datetime
 from pathlib import Path
 import threading
 import tkinter as tk
@@ -109,11 +111,18 @@ class StockBotApp:
         )
 
         ttk.Label(toolbar, text="조회일").grid(row=0, column=2, padx=(14, 8), sticky="w")
-        ttk.Entry(toolbar, textvariable=self.base_date_var, width=13, font=("맑은 고딕", 13)).grid(
-            row=0,
-            column=3,
-            ipady=4,
+        date_box = ttk.Frame(toolbar)
+        date_box.grid(row=0, column=3)
+        self.base_date_entry = ttk.Entry(
+            date_box,
+            textvariable=self.base_date_var,
+            width=13,
+            font=("맑은 고딕", 13),
+            state="readonly",
         )
+        self.base_date_entry.grid(row=0, column=0, ipady=4)
+        self.base_date_entry.bind("<Button-1>", self.open_calendar)
+        self._add_button(date_box, "📅", self.open_calendar).grid(row=0, column=1, padx=(4, 0))
 
         actions = ttk.Frame(toolbar)
         actions.grid(row=0, column=4, padx=(14, 0))
@@ -186,7 +195,7 @@ class StockBotApp:
 
     def sync_prices(self) -> None:
         symbols = _parse_symbols(self.symbols_var.get())
-        base_date = self.base_date_var.get().strip() or None
+        base_date = _date_digits(self.base_date_var.get()) or None
         if not symbols:
             messagebox.showwarning("확인", "관심종목을 한 개 이상 입력해주세요.")
             return
@@ -215,7 +224,13 @@ class StockBotApp:
         self._run_background(task, done)
 
     def refresh_table(self) -> None:
-        rows = build_summary_rows(self.store.latest_ticks(limit=500))
+        all_rows = build_summary_rows(self.store.latest_ticks(limit=1000))
+        target = _date_digits(self.base_date_var.get())
+        if target:
+            rows = [row for row in all_rows if _date_digits(row.get("base_date")) == target]
+        else:
+            rows = _latest_per_symbol(all_rows)
+
         for item in self.tree.get_children():
             self.tree.delete(item)
         for row in rows:
@@ -270,17 +285,34 @@ class StockBotApp:
         return "공공데이터 연결됨" if self.settings.public_data_service_key else "공공데이터 키가 없습니다"
 
     def _update_summary(self, rows: list[Mapping[str, object]]) -> None:
-        date = _latest_base_date(rows)
+        date = _format_date(_latest_base_date(rows))
         up_rows = [row for row in rows if _numeric(row.get("change")) > 0]
         down_rows = [row for row in rows if _numeric(row.get("change")) < 0]
-        top_up = max(rows, key=lambda row: _numeric(row.get("change_rate")), default=None)
-        top_down = min(rows, key=lambda row: _numeric(row.get("change_rate")), default=None)
+        top_up = max(up_rows, key=lambda row: _numeric(row.get("change_rate")), default=None)
+        top_down = min(down_rows, key=lambda row: _numeric(row.get("change_rate")), default=None)
 
         self.summary_vars["date"].set(f"기준일: {date}")
         self.summary_vars["count"].set(f"관심종목: {len(rows)}개")
         self.summary_vars["up_down"].set(f"상승 {len(up_rows)}개 / 하락 {len(down_rows)}개")
         self.summary_vars["top_up"].set(f"가장 많이 오른 종목: {_summary_name(top_up)}")
         self.summary_vars["top_down"].set(f"가장 많이 내린 종목: {_summary_name(top_down)}")
+
+    def open_calendar(self, event: object = None) -> None:
+        _ = event
+        _CalendarPopup(
+            self.base_date_entry,
+            initial=_parse_date(self.base_date_var.get()),
+            on_pick=self._on_date_picked,
+            on_clear=self._on_date_cleared,
+        )
+
+    def _on_date_picked(self, picked: datetime.date) -> None:
+        self.base_date_var.set(picked.strftime("%Y-%m-%d"))
+        self.sync_prices()
+
+    def _on_date_cleared(self) -> None:
+        self.base_date_var.set("")
+        self.refresh_table()
 
 
 def run_gui(settings: Settings | None = None) -> None:
@@ -309,7 +341,7 @@ def _row_values(row: Mapping[str, object]) -> list[str]:
         _format_value(row.get("volume")),
         _format_value(row.get("amount")),
         _format_value(row.get("market_cap")),
-        str(row.get("base_date") or ""),
+        _format_date(row.get("base_date")),
     ]
 
 
@@ -364,6 +396,43 @@ def _latest_base_date(rows: list[Mapping[str, object]]) -> str:
     return max(dates) if dates else "날짜없음"
 
 
+def _latest_per_symbol(rows: list[Mapping[str, object]]) -> list[Mapping[str, object]]:
+    """Keep only the row with the most recent base_date per symbol."""
+    best: dict[str, Mapping[str, object]] = {}
+    for row in rows:
+        symbol = str(row.get("symbol") or "")
+        if not symbol:
+            continue
+        current = best.get(symbol)
+        if current is None or _date_digits(row.get("base_date")) > _date_digits(current.get("base_date")):
+            best[symbol] = row
+    return list(best.values())
+
+
+def _date_digits(value: object) -> str:
+    """Return only the digits of a date, e.g. '2026-07-14' -> '20260714'."""
+    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+    return digits if len(digits) == 8 else ""
+
+
+def _format_date(value: object) -> str:
+    """Format a YYYYMMDD (or YYYY-MM-DD) date as 'YYYY-MM-DD'."""
+    digits = _date_digits(value)
+    if digits:
+        return f"{digits[0:4]}-{digits[4:6]}-{digits[6:8]}"
+    return str(value or "")
+
+
+def _parse_date(value: object) -> datetime.date | None:
+    digits = _date_digits(value)
+    if not digits:
+        return None
+    try:
+        return datetime.date(int(digits[0:4]), int(digits[4:6]), int(digits[6:8]))
+    except ValueError:
+        return None
+
+
 def _summary_name(row: Mapping[str, object] | None) -> str:
     if not row:
         return "-"
@@ -384,3 +453,141 @@ def _friendly_error_message(exc: Exception) -> str:
     if "connection" in lowered or "timeout" in lowered or "network" in lowered:
         return "인터넷 연결을 확인한 뒤 다시 시도해주세요."
     return f"오류가 발생했습니다: {text}"
+
+
+class _CalendarPopup:
+    """A lightweight, dependency-free calendar for picking the query date.
+
+    Future dates (after today) cannot be selected, so the user can only look at
+    today or earlier trading days.
+    """
+
+    WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"]
+
+    def __init__(
+        self,
+        anchor: tk.Widget,
+        initial: datetime.date | None,
+        on_pick: Callable[[datetime.date], None],
+        on_clear: Callable[[], None] | None = None,
+    ) -> None:
+        self.on_pick = on_pick
+        self.on_clear = on_clear
+        self.today = datetime.date.today()
+        self.max_date = self.today
+        start = initial or self.today
+        if start > self.max_date:
+            start = self.max_date
+        self.year = start.year
+        self.month = start.month
+
+        self.top = tk.Toplevel(anchor)
+        self.top.title("조회일 선택")
+        self.top.resizable(False, False)
+        try:
+            self.top.transient(anchor.winfo_toplevel())
+            self.top.geometry(
+                f"+{anchor.winfo_rootx()}"
+                f"+{anchor.winfo_rooty() + anchor.winfo_height() + 4}"
+            )
+        except tk.TclError:
+            pass
+
+        self.header_var = tk.StringVar()
+        self._build()
+        self._render()
+        try:
+            self.top.grab_set()
+        except tk.TclError:
+            pass
+
+    def _build(self) -> None:
+        header = ttk.Frame(self.top, padding=(8, 8, 8, 4))
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(1, weight=1)
+        ttk.Button(header, text="◀", width=3, command=self._prev_month).grid(row=0, column=0)
+        ttk.Label(
+            header,
+            textvariable=self.header_var,
+            anchor="center",
+            font=("맑은 고딕", 13, "bold"),
+        ).grid(row=0, column=1, sticky="ew")
+        self.next_button = ttk.Button(header, text="▶", width=3, command=self._next_month)
+        self.next_button.grid(row=0, column=2)
+
+        self.grid_frame = ttk.Frame(self.top, padding=(8, 0, 8, 4))
+        self.grid_frame.grid(row=1, column=0)
+
+        footer = ttk.Frame(self.top, padding=(8, 0, 8, 8))
+        footer.grid(row=2, column=0, sticky="ew")
+        ttk.Button(footer, text="오늘", command=lambda: self._pick(self.today)).grid(
+            row=0, column=0, padx=2
+        )
+        if self.on_clear is not None:
+            ttk.Button(footer, text="전체(최신)", command=self._clear).grid(row=0, column=1, padx=2)
+
+    def _render(self) -> None:
+        self.header_var.set(f"{self.year}년 {self.month}월")
+        for child in self.grid_frame.winfo_children():
+            child.destroy()
+
+        for col, name in enumerate(self.WEEKDAYS):
+            color = "#c62828" if col == 0 else ("#1565c0" if col == 6 else "#000000")
+            ttk.Label(
+                self.grid_frame, text=name, width=4, anchor="center", foreground=color
+            ).grid(row=0, column=col, padx=1, pady=1)
+
+        weeks = calendar.Calendar(firstweekday=6).monthdayscalendar(self.year, self.month)
+        for row_index, week in enumerate(weeks, start=1):
+            for col, day in enumerate(week):
+                if day == 0:
+                    continue
+                date = datetime.date(self.year, self.month, day)
+                button = ttk.Button(
+                    self.grid_frame,
+                    text=str(day),
+                    width=4,
+                    command=lambda picked=date: self._pick(picked),
+                )
+                button.grid(row=row_index, column=col, padx=1, pady=1)
+                if date > self.max_date:
+                    button.state(["disabled"])
+
+        if (self.year, self.month) >= (self.max_date.year, self.max_date.month):
+            self.next_button.state(["disabled"])
+        else:
+            self.next_button.state(["!disabled"])
+
+    def _prev_month(self) -> None:
+        if self.month == 1:
+            self.year, self.month = self.year - 1, 12
+        else:
+            self.month -= 1
+        self._render()
+
+    def _next_month(self) -> None:
+        if (self.year, self.month) >= (self.max_date.year, self.max_date.month):
+            return
+        if self.month == 12:
+            self.year, self.month = self.year + 1, 1
+        else:
+            self.month += 1
+        self._render()
+
+    def _pick(self, date: datetime.date) -> None:
+        if date > self.max_date:
+            return
+        self._close()
+        self.on_pick(date)
+
+    def _clear(self) -> None:
+        self._close()
+        if self.on_clear is not None:
+            self.on_clear()
+
+    def _close(self) -> None:
+        try:
+            self.top.grab_release()
+        except tk.TclError:
+            pass
+        self.top.destroy()
